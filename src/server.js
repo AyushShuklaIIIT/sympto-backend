@@ -164,6 +164,27 @@ app.get('/health', cacheHeaders(60), (req, res) => {
   });
 });
 
+// Root route (handy for Render "Open" button)
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    message: 'Sympto API is running',
+    health: '/health',
+    apiBase: '/api',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Optional: basic API index
+app.get('/api', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    message: 'Sympto API',
+    routes: ['/api/auth', '/api/assessments', '/api/users', '/api/consent'],
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Import routes
 import authRoutes from './routes/auth.js';
 import assessmentRoutes from './routes/assessments.js';
