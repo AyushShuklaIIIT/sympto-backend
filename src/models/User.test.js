@@ -48,4 +48,19 @@ describe('User model encryption/validation compatibility', () => {
     user.lastLogin = new Date();
     await expect(user.save()).resolves.toBeDefined();
   });
+
+  test('allows saving a user with dateOfBirth (stored as Date)', async () => {
+    const email = `dob-${Date.now()}@example.com`;
+    const user = new User({
+      email,
+      password: 'Abcd1234',
+      firstName: 'Test',
+      lastName: 'User',
+      dateOfBirth: new Date('2000-01-01'),
+    });
+
+    await expect(user.save()).resolves.toBeDefined();
+    expect(user.dateOfBirth instanceof Date).toBe(true);
+    expect(typeof user.age === 'number' || user.age === null).toBe(true);
+  });
 });

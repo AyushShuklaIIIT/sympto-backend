@@ -129,9 +129,6 @@ userSchema.pre('save', async function(next) {
   if (this.isModified('lastName')) {
     this.lastName = encryptData(this.lastName);
   }
-  if (this.isModified('dateOfBirth') && this.dateOfBirth) {
-    this.dateOfBirth = encryptData(this.dateOfBirth.toISOString());
-  }
 
   next();
 });
@@ -148,10 +145,6 @@ userSchema.post(['find', 'findOne', 'findOneAndUpdate'], function(docs) {
         }
         if (doc.lastName) {
           doc.lastName = decryptData(doc.lastName);
-        }
-        if (doc.dateOfBirth && typeof doc.dateOfBirth === 'string') {
-          const decryptedDate = decryptData(doc.dateOfBirth);
-          doc.dateOfBirth = new Date(decryptedDate);
         }
       } catch (error) {
         console.error('Error decrypting user data:', error);
@@ -194,9 +187,25 @@ userSchema.statics.findActive = function() {
 // Virtual for user age
 userSchema.virtual('age').get(function() {
   if (!this.dateOfBirth) return null;
-  
+
   const today = new Date();
-  const birthDate = new Date(this.dateOfBirth);
+
+  // Backwards compatibility: if a legacy deployment stored an encrypted DOB string,
+  // try to decrypt it; otherwise, return null.
+  let birthDate = this.dateOfBirth;
+  if (typeof birthDate === 'string') {
+    if (isEncryptedValue(birthDate)) {
+      try {
+        birthDate = new Date(decryptData(birthDate));
+      } catch {
+        return null;
+      }
+    } else {
+      birthDate = new Date(birthDate);
+    }
+  }
+  birthDate = new Date(birthDate);
+  if (Number.isNaN(birthDate.getTime())) return null;
   let age = today.getFullYear() - birthDate.getFullYear();
   const monthDiff = today.getMonth() - birthDate.getMonth();
   
