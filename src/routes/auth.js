@@ -87,13 +87,11 @@ router.post('/register', sensitiveSecurityMiddleware, [
     const user = new User(userData);
     await user.save();
 
-    // Send verification email
-    try {
-      await sendVerificationEmail(email, firstName, emailVerificationToken);
-    } catch (emailError) {
+    // Send verification email (non-blocking). Don't delay registration on SMTP timeouts.
+    // In many hosts, outbound SMTP can be blocked or slow.
+    sendVerificationEmail(email, firstName, emailVerificationToken).catch((emailError) => {
       console.error('Failed to send verification email:', emailError);
-      // Don't fail registration if email fails
-    }
+    });
 
     // Generate tokens
     const tokens = createTokenResponse(user);
@@ -116,6 +114,43 @@ router.post('/register', sensitiveSecurityMiddleware, [
 
   } catch (error) {
     console.error('Registration error:', error);
+
+    // Duplicate key errors (e.g., unique index conflicts)
+    if (error && error.code === 11000) {
+      const key = error?.keyPattern ? Object.keys(error.keyPattern)[0] : undefined;
+      if (key === 'email') {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: 'USER_EXISTS',
+            message: 'User with this email already exists',
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+
+      if (key === 'auth0Id') {
+        return res.status(500).json({
+          success: false,
+          error: {
+            code: 'DB_INDEX_CONFLICT',
+            message:
+              'Database index conflict detected (auth0Id unique index). Drop/modify the auth0Id_1 index or use a clean database before registering users.',
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'DUPLICATE_ENTRY',
+          message: 'Duplicate entry',
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
+
     res.status(500).json({
       success: false,
       error: {

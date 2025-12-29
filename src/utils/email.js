@@ -7,11 +7,22 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@sympto.com';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
+const EMAIL_ENABLED = (process.env.EMAIL_ENABLED || '').toLowerCase() === 'true';
+const EMAIL_TIMEOUT_MS = parseInt(process.env.EMAIL_TIMEOUT_MS, 10) || 10000;
+
 // Create transporter
 const createTransporter = () => {
-  // In development, use ethereal email for testing
-  if (process.env.NODE_ENV === 'development' && (!EMAIL_USER || !EMAIL_PASS)) {
-    console.warn('Email credentials not configured. Using test mode.');
+  // By default, disable SMTP in production unless explicitly enabled.
+  // Many hosts (including Render free tiers) can block outbound SMTP or cause long timeouts.
+  if (process.env.NODE_ENV === 'production' && !EMAIL_ENABLED) {
+    return null;
+  }
+
+  // If credentials are missing, fall back to "no-op" mode.
+  if (!EMAIL_USER || !EMAIL_PASS) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Email credentials not configured. Using test mode.');
+    }
     return null;
   }
 
@@ -23,6 +34,9 @@ const createTransporter = () => {
       user: EMAIL_USER,
       pass: EMAIL_PASS,
     },
+    connectionTimeout: EMAIL_TIMEOUT_MS,
+    greetingTimeout: EMAIL_TIMEOUT_MS,
+    socketTimeout: EMAIL_TIMEOUT_MS,
     tls: {
       rejectUnauthorized: false // Allow self-signed certificates in development
     }
