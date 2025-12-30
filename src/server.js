@@ -138,18 +138,20 @@ app.use('/api/auth', authLimiter);
 app.use(express.json({ 
   limit: '10mb',
   verify: (req, res, buf) => {
+    // Some endpoints legitimately send no body (e.g. POST /assessments/:id/analyze).
+    // Clients may still set `Content-Type: application/json`, yielding an empty buffer.
+    if (!buf || buf.length === 0) return;
+
+    const text = buf.toString('utf8').trim();
+    if (!text) return;
+
     try {
-      JSON.parse(buf);
-    } catch (e) {
-      res.status(400).json({
-        success: false,
-        error: {
-          code: 'INVALID_JSON',
-          message: 'Invalid JSON format',
-          timestamp: new Date().toISOString()
-        }
-      });
-      throw new Error('Invalid JSON');
+      JSON.parse(text);
+    } catch {
+      const error = new Error('Invalid JSON');
+      error.status = 400;
+      error.code = 'INVALID_JSON';
+      throw error;
     }
   }
 }));
@@ -211,6 +213,10 @@ app.use('/api', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+
   // Log error details
   console.error(`Error occurred at ${new Date().toISOString()}:`, {
     message: err.message,
@@ -225,6 +231,17 @@ app.use((err, req, res, next) => {
   const isDevelopment = process.env.NODE_ENV === 'development';
   
   // Handle specific error types
+  if (err.code === 'INVALID_JSON' || err.type === 'entity.parse.failed') {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'INVALID_JSON',
+        message: 'Invalid JSON format',
+        timestamp: new Date().toISOString()
+      }
+    });
+  }
+
   if (err.name === 'ValidationError') {
     return res.status(400).json({
       success: false,
@@ -294,9 +311,7 @@ const startServer = async () => {
 
     if (useLocalHttps) {
       const httpsServer = createSecureServer(app);
-      if (!httpsServer) {
-        console.warn('USE_LOCAL_HTTPS=true but HTTPS_KEY_PATH/HTTPS_CERT_PATH not set or invalid. Falling back to HTTP.');
-      } else {
+      if (httpsServer) {
         const httpsPort = process.env.HTTPS_PORT || 5001;
         httpsServer.listen(httpsPort, () => {
           console.log(`🔒 Local HTTPS Server running on port ${httpsPort}`);
@@ -315,6 +330,8 @@ const startServer = async () => {
 
         return httpsServer;
       }
+
+      console.warn('USE_LOCAL_HTTPS=true but HTTPS_KEY_PATH/HTTPS_CERT_PATH not set or invalid. Falling back to HTTP.');
     }
 
     // Default: plain HTTP on PORT (TLS handled by the platform)

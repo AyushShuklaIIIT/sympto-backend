@@ -2,6 +2,8 @@
  * AI Service for health assessment analysis
  * Handles communication with external AI model for health insights
  */
+import { decryptHealthData } from '../utils/encryption.js';
+
 class AIService {
   constructor() {
     // Expect a base URL like: https://nutritionfastapi.onrender.com
@@ -9,9 +11,9 @@ class AIService {
     this.baseUrl = process.env.AI_MODEL_URL || 'https://nutritionfastapi.onrender.com';
     // Optional (FastAPI deployment may not require auth)
     this.apiKey = process.env.AI_API_KEY;
-    this.timeout = parseInt(process.env.AI_TIMEOUT) || 30000; // 30 seconds default
-    this.maxRetries = parseInt(process.env.AI_MAX_RETRIES) || 3;
-    this.retryDelay = parseInt(process.env.AI_RETRY_DELAY) || 1000; // 1 second default
+    this.timeout = Number.parseInt(process.env.AI_TIMEOUT, 10) || 30000; // 30 seconds default
+    this.maxRetries = Number.parseInt(process.env.AI_MAX_RETRIES, 10) || 3;
+    this.retryDelay = Number.parseInt(process.env.AI_RETRY_DELAY, 10) || 1000; // 1 second default
   }
 
   /**
@@ -20,6 +22,17 @@ class AIService {
    * @returns {Object} Formatted data for AI model
    */
   formatAssessmentForAI(assessment) {
+    // Lab fields are encrypted at rest. When analysis runs immediately after a save,
+    // the in-memory document contains ciphertext strings. Decrypt them before
+    // sending to the AI endpoint to avoid NaN/null payloads.
+    const decryptedLabs = decryptHealthData({
+      hemoglobin: assessment.hemoglobin,
+      ferritin: assessment.ferritin,
+      vitamin_b12: assessment.vitamin_b12,
+      vitamin_d: assessment.vitamin_d,
+      calcium: assessment.calcium
+    });
+
     return {
       // Flat payload expected by the ML endpoint.
       fatigue: Number(assessment.fatigue),
@@ -35,11 +48,11 @@ class AIService {
       junk_food_freq: Number(assessment.junk_food_freq),
       smoking: Number(assessment.smoking),
       alcohol: Number(assessment.alcohol),
-      hemoglobin: Number(assessment.hemoglobin),
-      ferritin: Number(assessment.ferritin),
-      vitamin_b12: Number(assessment.vitamin_b12),
-      vitamin_d: Number(assessment.vitamin_d),
-      calcium: Number(assessment.calcium)
+      hemoglobin: Number(decryptedLabs.hemoglobin),
+      ferritin: Number(decryptedLabs.ferritin),
+      vitamin_b12: Number(decryptedLabs.vitamin_b12),
+      vitamin_d: Number(decryptedLabs.vitamin_d),
+      calcium: Number(decryptedLabs.calcium)
     };
   }
 
@@ -129,6 +142,91 @@ class AIService {
 
     const hasAny = Object.values(modelTextOutputs).some(v => v !== null && v !== '');
     return hasAny ? modelTextOutputs : null;
+  }
+
+  buildFallbackAnalysis(assessment, reason) {
+    const labs = decryptHealthData({
+      hemoglobin: assessment.hemoglobin,
+      ferritin: assessment.ferritin,
+      vitamin_b12: assessment.vitamin_b12,
+      vitamin_d: assessment.vitamin_d,
+      calcium: assessment.calcium
+    });
+
+    const ferritin = Number(labs.ferritin);
+    const b12 = Number(labs.vitamin_b12);
+    const vitd = Number(labs.vitamin_d);
+    const calcium = Number(labs.calcium);
+
+    const iron_def = Number.isFinite(ferritin) && ferritin < 30 ? 1 : 0;
+    const b12_def = Number.isFinite(b12) && b12 < 200 ? 1 : 0;
+    const vitd_def = Number.isFinite(vitd) && vitd < 20 ? 1 : 0;
+    const calcium_def = Number.isFinite(calcium) && calcium < 8.6 ? 1 : 0;
+
+    const symptomScores = [
+      Number(assessment.fatigue),
+      Number(assessment.hair_loss),
+      Number(assessment.acidity),
+      Number(assessment.dizziness),
+      Number(assessment.muscle_pain),
+      Number(assessment.numbness)
+    ].filter(Number.isFinite);
+    const avgSymptom = symptomScores.length
+      ? symptomScores.reduce((a, b) => a + b, 0) / symptomScores.length
+      : 0;
+
+    const defCount = iron_def + b12_def + vitd_def + calcium_def;
+    const severity = Math.max(
+      0,
+      Math.min(3, Math.round(defCount + avgSymptom / 2))
+    );
+
+    const dietBits = [];
+    if (iron_def) dietBits.push('iron-rich foods (lentils/beans, leafy greens, lean meats)');
+    if (b12_def) dietBits.push('vitamin B12 sources (eggs/dairy/fish or fortified foods)');
+    if (vitd_def) dietBits.push('vitamin D sources (fortified foods, safe sunlight exposure)');
+    if (calcium_def) dietBits.push('calcium sources (dairy/fortified alternatives, leafy greens)');
+    if (dietBits.length === 0) dietBits.push('a balanced diet with whole foods');
+
+    const modelOutputs = {
+      iron_def,
+      b12_def,
+      vitd_def,
+      calcium_def,
+      severity
+    };
+
+    const modelTextOutputs = {
+      medicationBrandNames: null,
+      medicationText:
+        'If symptoms persist, consider discussing bloodwork and supplements with a qualified clinician.',
+      dietAdditions: `Consider adding: ${dietBits.join(', ')}.`,
+      nutrientRequirements: 'Aim for adequate protein, iron, B12, vitamin D, and calcium from diet and/or clinician-guided supplementation.',
+      vegetarianFoodMapping: Number(assessment.vegetarian) === 1
+        ? 'Vegetarian options: legumes, tofu, tempeh, fortified cereals/plant milks, leafy greens, nuts/seeds.'
+        : null,
+      mandatoryDietChanges: 'Reduce ultra-processed foods and stay hydrated; prioritize regular meals and sleep.'
+    };
+
+    const analysisResult = {
+      insights:
+        'External AI analysis is temporarily unavailable. Showing a low-confidence, rule-based screening from your inputs.',
+      recommendations: [
+        'Re-check results after a short time; the AI service may recover.',
+        'If you have concerning symptoms, seek professional medical advice.'
+      ],
+      riskFactors: [
+        ...(Number(assessment.sunlight_min) < 10 ? ['Low sunlight exposure'] : []),
+        ...(Number(assessment.junk_food_freq) >= 2 ? ['Frequent junk food intake'] : []),
+        ...(Number(assessment.smoking) === 1 ? ['Smoking'] : []),
+        ...(Number(assessment.alcohol) === 1 ? ['Alcohol use'] : [])
+      ],
+      confidence: 0.45,
+      processedAt: new Date(),
+      modelVersion: `fallback-rules${reason ? `:${String(reason).slice(0, 60)}` : ''}`
+    };
+
+    return { modelOutputs, modelTextOutputs, analysisResult };
   }
 
   /**
@@ -241,7 +339,7 @@ class AIService {
   /**
    * Analyze health assessment using AI model
    * @param {Object} assessment - Assessment object from database
-   * @returns {Object} AI analysis results
+    * @returns {Promise<Object>} AI analysis results
    */
   async analyzeAssessment(assessment) {
     try {
@@ -253,8 +351,18 @@ class AIService {
       // Format data for AI model
       const formattedData = this.formatAssessmentForAI(assessment);
 
-      // Make request to AI service
-      const aiResponse = await this.makeAIRequest(formattedData);
+      let aiResponse;
+      try {
+        aiResponse = await this.makeAIRequest(formattedData);
+      } catch (error) {
+        const fallback = this.buildFallbackAnalysis(assessment, error?.message);
+        return {
+          success: true,
+          data: fallback.analysisResult,
+          modelOutputs: fallback.modelOutputs,
+          modelTextOutputs: fallback.modelTextOutputs
+        };
+      }
 
       const modelOutputs = this.extractModelOutputs(aiResponse);
       const modelTextOutputs = this.extractModelTextOutputs(aiResponse);
@@ -274,6 +382,17 @@ class AIService {
               modelVersion: aiResponse.metadata?.modelVersion || 'nutritionfastapi'
             }
           : null;
+
+      // If the external service responded but doesn't provide usable outputs, fall back.
+      if (!analysisResult && !modelOutputs && !modelTextOutputs) {
+        const fallback = this.buildFallbackAnalysis(assessment, 'empty-response');
+        return {
+          success: true,
+          data: fallback.analysisResult,
+          modelOutputs: fallback.modelOutputs,
+          modelTextOutputs: fallback.modelTextOutputs
+        };
+      }
 
       return {
         success: true,
@@ -304,7 +423,7 @@ class AIService {
   getErrorCode(error) {
     if (error.message.includes('timeout')) {
       return 'AI_SERVICE_TIMEOUT';
-    }
+    * @returns {Promise<Object>} AI analysis response
     if (error.message.includes('unavailable')) {
       return 'AI_SERVICE_UNAVAILABLE';
     }
@@ -329,12 +448,17 @@ class AIService {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for health check
 
-      const response = await fetch(`${this.baseUrl}/health`, {
+      const base = this.baseUrl.endsWith('/predict') ? this.baseUrl.slice(0, -'/predict'.length) : this.baseUrl;
+      const headers = {
+        'User-Agent': 'Sympto-Health-Platform/1.0'
+      };
+      if (this.apiKey) {
+        headers.Authorization = `Bearer ${this.apiKey}`;
+      }
+
+      const response = await fetch(`${base}/health`, {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'User-Agent': 'Sympto-Health-Platform/1.0'
-        },
+        headers,
         signal: controller.signal
       });
 
