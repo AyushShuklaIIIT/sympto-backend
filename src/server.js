@@ -192,12 +192,14 @@ import authRoutes from './routes/auth.js';
 import assessmentRoutes from './routes/assessments.js';
 import userRoutes from './routes/users.js';
 import consentRoutes from './routes/consent.js';
+import aiRoutes from './routes/ai.js';
 
 // API routes with caching strategies
 app.use('/api/auth', noCache(), authRoutes); // No cache for auth
 app.use('/api/assessments', memoryCache(300000), assessmentRoutes); // 5 min cache for assessments
 app.use('/api/users', noCache(), userRoutes); // No cache for user data
 app.use('/api/consent', memoryCache(600000), consentRoutes); // 10 min cache for consent
+app.use('/api/ai', noCache(), aiRoutes); // No cache for AI warmup/health
 
 // Catch-all for undefined API routes
 app.use('/api', (req, res) => {

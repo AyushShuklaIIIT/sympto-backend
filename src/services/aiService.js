@@ -144,91 +144,6 @@ class AIService {
     return hasAny ? modelTextOutputs : null;
   }
 
-  buildFallbackAnalysis(assessment, reason) {
-    const labs = decryptHealthData({
-      hemoglobin: assessment.hemoglobin,
-      ferritin: assessment.ferritin,
-      vitamin_b12: assessment.vitamin_b12,
-      vitamin_d: assessment.vitamin_d,
-      calcium: assessment.calcium
-    });
-
-    const ferritin = Number(labs.ferritin);
-    const b12 = Number(labs.vitamin_b12);
-    const vitd = Number(labs.vitamin_d);
-    const calcium = Number(labs.calcium);
-
-    const iron_def = Number.isFinite(ferritin) && ferritin < 30 ? 1 : 0;
-    const b12_def = Number.isFinite(b12) && b12 < 200 ? 1 : 0;
-    const vitd_def = Number.isFinite(vitd) && vitd < 20 ? 1 : 0;
-    const calcium_def = Number.isFinite(calcium) && calcium < 8.6 ? 1 : 0;
-
-    const symptomScores = [
-      Number(assessment.fatigue),
-      Number(assessment.hair_loss),
-      Number(assessment.acidity),
-      Number(assessment.dizziness),
-      Number(assessment.muscle_pain),
-      Number(assessment.numbness)
-    ].filter(Number.isFinite);
-    const avgSymptom = symptomScores.length
-      ? symptomScores.reduce((a, b) => a + b, 0) / symptomScores.length
-      : 0;
-
-    const defCount = iron_def + b12_def + vitd_def + calcium_def;
-    const severity = Math.max(
-      0,
-      Math.min(3, Math.round(defCount + avgSymptom / 2))
-    );
-
-    const dietBits = [];
-    if (iron_def) dietBits.push('iron-rich foods (lentils/beans, leafy greens, lean meats)');
-    if (b12_def) dietBits.push('vitamin B12 sources (eggs/dairy/fish or fortified foods)');
-    if (vitd_def) dietBits.push('vitamin D sources (fortified foods, safe sunlight exposure)');
-    if (calcium_def) dietBits.push('calcium sources (dairy/fortified alternatives, leafy greens)');
-    if (dietBits.length === 0) dietBits.push('a balanced diet with whole foods');
-
-    const modelOutputs = {
-      iron_def,
-      b12_def,
-      vitd_def,
-      calcium_def,
-      severity
-    };
-
-    const modelTextOutputs = {
-      medicationBrandNames: null,
-      medicationText:
-        'If symptoms persist, consider discussing bloodwork and supplements with a qualified clinician.',
-      dietAdditions: `Consider adding: ${dietBits.join(', ')}.`,
-      nutrientRequirements: 'Aim for adequate protein, iron, B12, vitamin D, and calcium from diet and/or clinician-guided supplementation.',
-      vegetarianFoodMapping: Number(assessment.vegetarian) === 1
-        ? 'Vegetarian options: legumes, tofu, tempeh, fortified cereals/plant milks, leafy greens, nuts/seeds.'
-        : null,
-      mandatoryDietChanges: 'Reduce ultra-processed foods and stay hydrated; prioritize regular meals and sleep.'
-    };
-
-    const analysisResult = {
-      insights:
-        'External AI analysis is temporarily unavailable. Showing a low-confidence, rule-based screening from your inputs.',
-      recommendations: [
-        'Re-check results after a short time; the AI service may recover.',
-        'If you have concerning symptoms, seek professional medical advice.'
-      ],
-      riskFactors: [
-        ...(Number(assessment.sunlight_min) < 10 ? ['Low sunlight exposure'] : []),
-        ...(Number(assessment.junk_food_freq) >= 2 ? ['Frequent junk food intake'] : []),
-        ...(Number(assessment.smoking) === 1 ? ['Smoking'] : []),
-        ...(Number(assessment.alcohol) === 1 ? ['Alcohol use'] : [])
-      ],
-      confidence: 0.45,
-      processedAt: new Date(),
-      modelVersion: `fallback-rules${reason ? `:${String(reason).slice(0, 60)}` : ''}`
-    };
-
-    return { modelOutputs, modelTextOutputs, analysisResult };
-  }
-
   /**
    * Sleep utility for retry delays
    * @param {number} ms - Milliseconds to sleep
@@ -351,18 +266,7 @@ class AIService {
       // Format data for AI model
       const formattedData = this.formatAssessmentForAI(assessment);
 
-      let aiResponse;
-      try {
-        aiResponse = await this.makeAIRequest(formattedData);
-      } catch (error) {
-        const fallback = this.buildFallbackAnalysis(assessment, error?.message);
-        return {
-          success: true,
-          data: fallback.analysisResult,
-          modelOutputs: fallback.modelOutputs,
-          modelTextOutputs: fallback.modelTextOutputs
-        };
-      }
+      const aiResponse = await this.makeAIRequest(formattedData);
 
       const modelOutputs = this.extractModelOutputs(aiResponse);
       const modelTextOutputs = this.extractModelTextOutputs(aiResponse);
@@ -385,13 +289,7 @@ class AIService {
 
       // If the external service responded but doesn't provide usable outputs, fall back.
       if (!analysisResult && !modelOutputs && !modelTextOutputs) {
-        const fallback = this.buildFallbackAnalysis(assessment, 'empty-response');
-        return {
-          success: true,
-          data: fallback.analysisResult,
-          modelOutputs: fallback.modelOutputs,
-          modelTextOutputs: fallback.modelTextOutputs
-        };
+        throw new Error('AI service returned an empty or unsupported response');
       }
 
       return {
