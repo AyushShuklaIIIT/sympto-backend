@@ -241,7 +241,7 @@ class AIService {
    * Make HTTP request to AI service with retry logic
    * @param {Object} data - Formatted assessment data
    * @param {number} attempt - Current attempt number (for retry logic)
-   * @returns {Object} AI analysis response
+    * @returns {Promise<Object>} AI analysis response
    */
   async makeAIRequest(data, attempt = 1) {
     // Use dynamic import for node-fetch to avoid Jest issues
@@ -423,7 +423,7 @@ class AIService {
   getErrorCode(error) {
     if (error.message.includes('timeout')) {
       return 'AI_SERVICE_TIMEOUT';
-    * @returns {Promise<Object>} AI analysis response
+    }
     if (error.message.includes('unavailable')) {
       return 'AI_SERVICE_UNAVAILABLE';
     }
