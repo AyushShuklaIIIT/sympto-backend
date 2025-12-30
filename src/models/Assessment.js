@@ -105,7 +105,7 @@ const assessmentSchema = new mongoose.Schema({
     type: Number,
     required: [true, 'Sunlight exposure is required'],
     min: [0, 'Sunlight exposure cannot be negative'],
-    max: [59, 'Sunlight exposure must be between 0 and 59 minutes per day'],
+    max: [65, 'Sunlight exposure must be between 0 and 65 minutes per day'],
     validate: {
       validator: Number.isInteger,
       message: 'Sunlight exposure must be an integer'
@@ -146,8 +146,8 @@ const assessmentSchema = new mongoose.Schema({
   hemoglobin: {
     type: Number,
     required: [true, 'Hemoglobin level is required'],
-    min: [3.0, 'Hemoglobin level seems too low'],
-    max: [25.0, 'Hemoglobin level seems too high'],
+    min: [7.2, 'Hemoglobin level must be between 7.2 and 16.5'],
+    max: [16.5, 'Hemoglobin level must be between 7.2 and 16.5'],
     validate: {
       validator: function(value) {
         if (!Number.isFinite(value)) return false;
@@ -160,8 +160,8 @@ const assessmentSchema = new mongoose.Schema({
   ferritin: {
     type: Number,
     required: [true, 'Ferritin level is required'],
-    min: [1, 'Ferritin level seems too low'],
-    max: [2000, 'Ferritin level seems too high'],
+    min: [4.5, 'Ferritin level must be between 4.5 and 165'],
+    max: [165, 'Ferritin level must be between 4.5 and 165'],
     validate: {
       validator: function(value) {
         if (!Number.isFinite(value)) return false;
@@ -174,8 +174,8 @@ const assessmentSchema = new mongoose.Schema({
   vitamin_b12: {
     type: Number,
     required: [true, 'Vitamin B12 level is required'],
-    min: [50, 'Vitamin B12 level seems too low'],
-    max: [2000, 'Vitamin B12 level seems too high'],
+    min: [108, 'Vitamin B12 level must be between 108 and 550'],
+    max: [550, 'Vitamin B12 level must be between 108 and 550'],
     validate: {
       validator: function(value) {
         if (!Number.isFinite(value)) return false;
@@ -188,8 +188,8 @@ const assessmentSchema = new mongoose.Schema({
   vitamin_d: {
     type: Number,
     required: [true, 'Vitamin D level is required'],
-    min: [5, 'Vitamin D level seems too low'],
-    max: [200, 'Vitamin D level seems too high'],
+    min: [4.5, 'Vitamin D level must be between 4.5 and 49.5'],
+    max: [49.5, 'Vitamin D level must be between 4.5 and 49.5'],
     validate: {
       validator: function(value) {
         if (!Number.isFinite(value)) return false;
@@ -202,8 +202,8 @@ const assessmentSchema = new mongoose.Schema({
   calcium: {
     type: Number,
     required: [true, 'Calcium level is required'],
-    min: [5.0, 'Calcium level seems too low'],
-    max: [15.0, 'Calcium level seems too high'],
+    min: [6.75, 'Calcium level must be between 6.75 and 11.22'],
+    max: [11.22, 'Calcium level must be between 6.75 and 11.22'],
     validate: {
       validator: function(value) {
         if (!Number.isFinite(value)) return false;

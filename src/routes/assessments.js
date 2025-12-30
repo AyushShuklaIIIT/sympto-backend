@@ -45,8 +45,8 @@ router.post('/', authenticateAndVerifyEmail, [
     .isInt({ min: 0, max: 3 })
     .withMessage('Dairy frequency must be between 0 and 3'),
   body('sunlight_min')
-    .isInt({ min: 0, max: 59 })
-    .withMessage('Sunlight minutes must be between 0 and 59 minutes per day'),
+    .isInt({ min: 0, max: 65 })
+    .withMessage('Sunlight minutes must be between 0 and 65 minutes per day'),
   body('junk_food_freq')
     .isInt({ min: 0, max: 3 })
     .withMessage('Junk food frequency must be between 0 and 3'),
@@ -57,20 +57,20 @@ router.post('/', authenticateAndVerifyEmail, [
     .isInt({ min: 0, max: 1 })
     .withMessage('Alcohol must be 0 or 1'),
   body('hemoglobin')
-    .isFloat({ min: 0, max: 30 })
-    .withMessage('Hemoglobin must be between 0 and 30 g/dL'),
+    .isFloat({ min: 7.2, max: 16.5 })
+    .withMessage('Hemoglobin must be between 7.2 and 16.5 g/dL'),
   body('ferritin')
-    .isFloat({ min: 0, max: 1000 })
-    .withMessage('Ferritin must be between 0 and 1000 ng/mL'),
+    .isFloat({ min: 4.5, max: 165 })
+    .withMessage('Ferritin must be between 4.5 and 165 ng/mL'),
   body('vitamin_b12')
-    .isFloat({ min: 0, max: 2000 })
-    .withMessage('Vitamin B12 must be between 0 and 2000 pg/mL'),
+    .isFloat({ min: 108, max: 550 })
+    .withMessage('Vitamin B12 must be between 108 and 550 pg/mL'),
   body('vitamin_d')
-    .isFloat({ min: 0, max: 200 })
-    .withMessage('Vitamin D must be between 0 and 200 ng/mL'),
+    .isFloat({ min: 4.5, max: 49.5 })
+    .withMessage('Vitamin D must be between 4.5 and 49.5 ng/mL'),
   body('calcium')
-    .isFloat({ min: 0, max: 20 })
-    .withMessage('Calcium must be between 0 and 20 mg/dL')
+    .isFloat({ min: 6.75, max: 11.22 })
+    .withMessage('Calcium must be between 6.75 and 11.22 mg/dL')
 ], async (req, res) => {
   try {
     // Check for validation errors
